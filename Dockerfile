@@ -12,6 +12,9 @@ WORKDIR /app
 # Install dumb-init for proper signal handling
 RUN apk add --no-cache dumb-init
 
+# Force cache invalidation - Change this value to rebuild
+ARG CACHEBUST=2
+
 # Copy package files
 COPY package*.json ./
 
