@@ -66,7 +66,7 @@ function getEnvInt(key: string, defaultValue: number): number {
  */
 export const envConfig: EnvConfig = {
   // Server
-  port: getEnvInt('PORT', 3001),
+  port: getEnvInt('PORT', 3006),
   nodeEnv: getEnv('NODE_ENV', 'development'),
 
   // Database
