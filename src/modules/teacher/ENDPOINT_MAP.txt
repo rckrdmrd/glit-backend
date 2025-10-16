@@ -1,0 +1,382 @@
+================================================================================
+TEACHER MODULE - COMPLETE ENDPOINT MAP
+================================================================================
+
+Base URL: http://localhost:3001/api/teacher
+
+All endpoints require:
+  - Authorization: Bearer <JWT_TOKEN>
+  - User role: teacher
+
+================================================================================
+CLASSROOM MANAGEMENT (8 endpoints)
+================================================================================
+
+[1] GET /classrooms
+    Description: List all classrooms for authenticated teacher
+    Pagination: ?page=1&limit=20&sortBy=created_at&order=desc
+    Controller: classroom.controller.ts -> getClassrooms()
+    Service: classroom.service.ts -> getTeacherClassrooms()
+    Repository: classroom.repository.ts -> getTeacherClassrooms()
+
+[2] POST /classrooms
+    Description: Create new classroom
+    Body: { name, description, grade_level, subject }
+    Controller: classroom.controller.ts -> createClassroom()
+    Service: classroom.service.ts -> createClassroom()
+    Repository: classroom.repository.ts -> createClassroom()
+
+[3] GET /classrooms/:id
+    Description: Get classroom details with students
+    Middleware: verifyClassroomOwnership
+    Controller: classroom.controller.ts -> getClassroomById()
+    Service: classroom.service.ts -> getClassroomById()
+    Repository: classroom.repository.ts -> getClassroomById()
+
+[4] PUT /classrooms/:id
+    Description: Update classroom information
+    Middleware: verifyClassroomOwnership
+    Body: { name?, description?, grade_level?, subject?, is_active? }
+    Controller: classroom.controller.ts -> updateClassroom()
+    Service: classroom.service.ts -> updateClassroom()
+    Repository: classroom.repository.ts -> updateClassroom()
+
+[5] DELETE /classrooms/:id
+    Description: Delete classroom and all associations
+    Middleware: verifyClassroomOwnership
+    Controller: classroom.controller.ts -> deleteClassroom()
+    Service: classroom.service.ts -> deleteClassroom()
+    Repository: classroom.repository.ts -> deleteClassroom()
+
+[6] GET /classrooms/:id/students ✨ NEW
+    Description: Get list of students in classroom
+    Middleware: verifyClassroomOwnership
+    Controller: classroom.controller.ts -> getClassroomStudents()
+    Service: classroom.service.ts -> getClassroomStudents()
+    Repository: classroom.repository.ts -> getClassroomStudents()
+
+[7] POST /classrooms/:id/students
+    Description: Add multiple students to classroom
+    Middleware: verifyClassroomOwnership
+    Body: { student_ids: ["uuid1", "uuid2"] }
+    Controller: classroom.controller.ts -> addStudents()
+    Service: classroom.service.ts -> addStudents()
+    Repository: classroom.repository.ts -> addStudents()
+
+[8] DELETE /classrooms/:classId/students/:studentId
+    Description: Remove student from classroom
+    Middleware: verifyClassroomOwnership
+    Controller: classroom.controller.ts -> removeStudent()
+    Service: classroom.service.ts -> removeStudent()
+    Repository: classroom.repository.ts -> removeStudent()
+
+================================================================================
+ASSIGNMENT MANAGEMENT (8 endpoints)
+================================================================================
+
+[9] GET /assignments
+    Description: List all assignments for authenticated teacher
+    Pagination: ?page=1&limit=20&sortBy=created_at&order=desc
+    Controller: assignments.controller.ts -> getAssignments()
+    Service: assignments.service.ts -> getTeacherAssignments()
+    Repository: assignments.repository.ts -> getTeacherAssignments()
+
+[10] POST /assignments
+     Description: Create new assignment
+     Body: { title, description, assignment_type, exercise_ids[], due_date?, total_points? }
+     Controller: assignments.controller.ts -> createAssignment()
+     Service: assignments.service.ts -> createAssignment()
+     Repository: assignments.repository.ts -> createAssignment()
+
+[11] GET /assignments/:id
+     Description: Get assignment details with exercises
+     Middleware: verifyAssignmentOwnership
+     Controller: assignments.controller.ts -> getAssignmentById()
+     Service: assignments.service.ts -> getAssignmentById()
+     Repository: assignments.repository.ts -> getAssignmentById()
+
+[12] PUT /assignments/:id
+     Description: Update assignment information
+     Middleware: verifyAssignmentOwnership
+     Body: { title?, description?, assignment_type?, due_date?, total_points?, is_published? }
+     Controller: assignments.controller.ts -> updateAssignment()
+     Service: assignments.service.ts -> updateAssignment()
+     Repository: assignments.repository.ts -> updateAssignment()
+
+[13] DELETE /assignments/:id
+     Description: Delete assignment and all associations
+     Middleware: verifyAssignmentOwnership
+     Controller: assignments.controller.ts -> deleteAssignment()
+     Service: assignments.service.ts -> deleteAssignment()
+     Repository: assignments.repository.ts -> deleteAssignment()
+
+[14] POST /assignments/:id/assign
+     Description: Assign to classrooms and/or students
+     Middleware: verifyAssignmentOwnership
+     Body: { classroom_ids?: ["uuid1"], student_ids?: ["uuid2"] }
+     Controller: assignments.controller.ts -> assignTo()
+     Service: assignments.service.ts -> assignTo()
+     Repository: assignments.repository.ts -> assignToClassrooms(), assignToStudents()
+
+[15] GET /assignments/:id/submissions
+     Description: Get all submissions for assignment
+     Middleware: verifyAssignmentOwnership
+     Controller: assignments.controller.ts -> getSubmissions()
+     Service: assignments.service.ts -> getAssignmentSubmissions()
+     Repository: assignments.repository.ts -> getSubmissionsByAssignment()
+
+[16] POST /assignments/:assignmentId/submissions/:submissionId/grade
+     Description: Grade a submission
+     Middleware: verifyAssignmentOwnership
+     Body: { score: 85, feedback?: "Great work!" }
+     Controller: assignments.controller.ts -> gradeSubmission()
+     Service: assignments.service.ts -> gradeSubmission()
+     Repository: assignments.repository.ts -> gradeSubmission()
+
+================================================================================
+GRADING & SUBMISSIONS (4 endpoints) ✨ ALL NEW
+================================================================================
+
+[17] GET /submissions/:id
+     Description: Get submission details with student info
+     Controller: grading.controller.ts -> getSubmission()
+     Service: grading.service.ts -> getSubmissionDetails()
+     Authorization: Verifies teacher owns the assignment
+
+[18] POST /submissions/:id/grade
+     Description: Submit grade for submission
+     Body: { score: 92, feedback?: "Excellent!" }
+     Validation: gradeSubmissionSchema
+     Controller: grading.controller.ts -> gradeSubmission()
+     Service: grading.service.ts -> gradeSubmission()
+     Features: Auto letter grade, notifications
+
+[19] POST /submissions/:id/feedback
+     Description: Add or update feedback on submission
+     Body: { feedback: "Additional comments..." }
+     Controller: grading.controller.ts -> addFeedback()
+     Service: grading.service.ts -> addFeedback()
+     Features: Notification if already graded
+
+[20] GET /submissions/pending
+     Description: Get all pending submissions for teacher
+     Pagination: ?page=1&limit=20&sortBy=submitted_at&order=asc
+     Controller: grading.controller.ts -> getPendingSubmissions()
+     Service: grading.service.ts -> getPendingSubmissions()
+     Features: Shows oldest submissions first
+
+================================================================================
+STUDENT PROGRESS (4 endpoints) ✨ ALL NEW
+================================================================================
+
+[21] GET /students/:id/progress
+     Description: Get student progress overview
+     Controller: student-progress.controller.ts -> getStudentProgress()
+     Service: student-progress.service.ts -> getStudentProgress()
+     Authorization: Verifies student in teacher's classroom
+     Returns: completion stats, average score, struggling areas
+
+[22] GET /students/:id/analytics
+     Description: Get detailed student analytics
+     Controller: student-progress.controller.ts -> getStudentAnalytics()
+     Service: student-progress.service.ts -> getStudentAnalytics()
+     Authorization: Verifies student in teacher's classroom
+     Returns: module performance, recent activity, assignment history
+
+[23] POST /students/:id/note
+     Description: Add private teacher note about student
+     Body: { note: "Student shows improvement...", is_private?: true }
+     Controller: student-progress.controller.ts -> addTeacherNote()
+     Service: student-progress.service.ts -> addTeacherNote()
+     Authorization: Verifies student in teacher's classroom
+     Database: teacher_notes table
+
+[24] GET /students/:id/notes
+     Description: Get all teacher notes for student
+     Controller: student-progress.controller.ts -> getTeacherNotes()
+     Service: student-progress.service.ts -> getTeacherNotes()
+     Authorization: Verifies student in teacher's classroom
+     Returns: Historical notes with timestamps
+
+================================================================================
+ANALYTICS (5 endpoints)
+================================================================================
+
+[25] GET /analytics/classroom/:id
+     Description: Get classroom analytics and student performance
+     Middleware: verifyClassroomOwnership
+     Controller: analytics.controller.ts -> getClassroomAnalytics()
+     Service: analytics.service.ts -> getClassroomAnalytics()
+     Repository: analytics.repository.ts -> getClassroomAnalytics()
+
+[26] GET /analytics/student/:id
+     Description: Get student performance analytics
+     Middleware: verifyStudentAccess
+     Controller: analytics.controller.ts -> getStudentAnalytics()
+     Service: analytics.service.ts -> getStudentAnalytics()
+     Repository: analytics.repository.ts -> getStudentAnalytics()
+
+[27] GET /analytics/assignment/:id
+     Description: Get assignment analytics and submission stats
+     Middleware: verifyAssignmentOwnership
+     Controller: analytics.controller.ts -> getAssignmentAnalytics()
+     Service: analytics.service.ts -> getAssignmentAnalytics()
+     Repository: analytics.repository.ts -> getAssignmentAnalytics()
+
+[28] GET /analytics/engagement
+     Description: Get engagement metrics for teacher's students
+     Query: ?start_date=2025-10-01&end_date=2025-10-31
+     Controller: analytics.controller.ts -> getEngagementMetrics()
+     Service: analytics.service.ts -> getEngagementMetrics()
+     Repository: analytics.repository.ts -> getEngagementMetrics()
+
+================================================================================
+ROUTE REGISTRATION
+================================================================================
+
+File: index.ts
+
+export function createTeacherRoutes(pool: Pool): Router {
+  const router = Router();
+  
+  router.use('/classrooms', createClassroomRoutes(pool));      // [1-8]
+  router.use('/assignments', createAssignmentRoutes(pool));    // [9-16]
+  router.use('/submissions', createGradingRoutes(pool));       // [17-20] ✨ NEW
+  router.use('/students', createStudentProgressRoutes(pool));  // [21-24] ✨ NEW
+  router.use('/analytics', createAnalyticsRoutes(pool));       // [25-28]
+  
+  return router;
+}
+
+Registered in: backend/src/app.ts
+  app.use('/api/teacher', createTeacherRoutes(pool));
+
+================================================================================
+AUTHORIZATION FLOW
+================================================================================
+
+1. authenticateJWT (middleware/auth.middleware.ts)
+   - Validates JWT token
+   - Extracts user info from token
+   - Sets req.user
+
+2. requireTeacherRole (teacher.middleware.ts)
+   - Verifies user.role === 'teacher'
+   - Returns 403 if not teacher
+
+3. Resource-specific verification (teacher.middleware.ts)
+   - verifyClassroomOwnership: classroom.teacher_id === user.id
+   - verifyAssignmentOwnership: assignment.teacher_id === user.id
+   - verifyStudentAccess: student in teacher's classrooms
+
+================================================================================
+NOTIFICATION FLOW
+================================================================================
+
+Helper: notifications.helper.ts
+
+Triggers:
+  - Assignment created → notifyNewAssignment()
+  - Submission graded → notifyAssignmentGraded()
+  - Feedback added → notifyFeedbackAdded()
+  - Due date near → notifyDueDateApproaching()
+
+Notification Types:
+  - assignment_created
+  - assignment_graded
+  - feedback_added
+  - due_date_reminder
+
+Recipients:
+  - Individual students
+  - All students in classroom
+  - All students assigned to assignment
+
+================================================================================
+GRADING RUBRIC
+================================================================================
+
+Function: calculateLetterGrade(score: number): string
+
+Grade Scale:
+  A: 90-100  (Excellent)
+  B: 80-89   (Good)
+  C: 70-79   (Satisfactory)
+  D: 60-69   (Needs Improvement)
+  F: 0-59    (Failing)
+
+Validation:
+  - Score must be 0-100
+  - Can only grade 'submitted' status
+  - Cannot change grade after submission
+
+================================================================================
+DATABASE TABLES USED
+================================================================================
+
+classrooms                  [1-8]
+classroom_students          [1,6-8]
+assignments                 [9-16]
+assignment_exercises        [10,11,14]
+assignment_classrooms       [14,15]
+assignment_students         [14,15]
+assignment_submissions      [15-20]
+teacher_notes              [23,24] ✨ NEW
+exercises                  [all]
+users (auth.users)         [all]
+profiles                   [all]
+gamification               [21,22,26]
+ranks                      [21,22,26]
+exercise_progress          [21,22,26]
+modules                    [22,26]
+
+================================================================================
+TESTING CHECKLIST
+================================================================================
+
+Classroom Management:
+  □ Create classroom
+  □ List classrooms with pagination
+  □ Get classroom details
+  □ Update classroom
+  □ Delete classroom
+  □ Get classroom students ✨
+  □ Add students to classroom
+  □ Remove student from classroom
+
+Assignment Management:
+  □ Create assignment
+  □ List assignments with pagination
+  □ Get assignment details
+  □ Update assignment
+  □ Delete assignment
+  □ Assign to classrooms
+  □ Assign to students
+  □ Get assignment submissions
+  □ Grade submission
+
+Grading: ✨
+  □ Get submission details
+  □ Grade submission with letter grade
+  □ Add feedback to submission
+  □ Get pending submissions
+
+Student Progress: ✨
+  □ Get student progress overview
+  □ Get detailed student analytics
+  □ Add teacher note
+  □ Get teacher notes
+
+Analytics:
+  □ Get classroom analytics
+  □ Get student analytics
+  □ Get assignment analytics
+  □ Get engagement metrics
+
+Authorization:
+  □ Test without token (401)
+  □ Test with non-teacher role (403)
+  □ Test accessing other teacher's resources (403)
+  □ Test accessing student not in classroom (403)
+
+================================================================================

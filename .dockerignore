@@ -1,0 +1,77 @@
+# Node.js
+node_modules/
+npm-debug.log
+yarn-error.log
+package-lock.json
+yarn.lock
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.swn
+.DS_Store
+
+# Documentation
+*.md
+!README.md
+docs/
+
+# Testing
+coverage/
+.nyc_output/
+*.test.ts
+*.spec.ts
+tests/
+__tests__/
+test/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+circle.yml
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose*.yml
+
+# Logs
+logs/
+*.log
+
+# Temporary files
+tmp/
+temp/
+.cache/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Other
+.editorconfig
+.prettierrc
+.prettierignore
+.eslintrc*
+.eslintignore
+tsconfig*.json
+jest.config.js
