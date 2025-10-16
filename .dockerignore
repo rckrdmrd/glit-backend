@@ -73,5 +73,5 @@ temp/
 .prettierignore
 .eslintrc*
 .eslintignore
-tsconfig*.json
+# tsconfig.json is needed for TypeScript compilation
 jest.config.js
