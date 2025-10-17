@@ -44,58 +44,60 @@ export class RanksRepository {
   constructor(private pool: Pool) {}
 
   /**
-   * Maya rank requirements
+   * Maya rank requirements - aligned with PDF specification
+   * Progression: Complete modules (qualitative approach as per PDF)
+   * Bonuses: 50, 75, 100, 125, 150 ML Coins as specified in PDF
    */
   private readonly RANK_REQUIREMENTS: Record<string, RankRequirements> = {
     nacom: {
       rank: 'nacom',
-      xpRequired: 0,
-      modulesRequired: 0,
-      mlCoinsThreshold: 0,
-      achievementsRequired: 0,
-      minimumScore: 70,
+      xpRequired: 0, // Not used for progression (maintained for compatibility)
+      modulesRequired: 1, // Complete Module 1 (Comprensión Literal)
+      mlCoinsThreshold: 0, // Not used for progression
+      achievementsRequired: 0, // Not used for progression
+      minimumScore: 70, // Kept as quality gate
       multiplier: 1.0,
-      mlBonus: 50,
+      mlBonus: 50, // PDF: +50 ML al completar
     },
     batab: {
       rank: 'batab',
-      xpRequired: 500,
-      modulesRequired: 1,
-      mlCoinsThreshold: 200,
-      achievementsRequired: 0,
-      minimumScore: 75,
+      xpRequired: 0, // Not used for progression
+      modulesRequired: 2, // Complete Module 2 (Comprensión Inferencial)
+      mlCoinsThreshold: 0, // Not used for progression
+      achievementsRequired: 0, // Not used for progression
+      minimumScore: 70, // Kept as quality gate
       multiplier: 1.25,
-      mlBonus: 75,
+      mlBonus: 75, // PDF: +75 ML al completar
     },
     holcatte: {
       rank: 'holcatte',
-      xpRequired: 1500,
-      modulesRequired: 2,
-      mlCoinsThreshold: 500,
-      achievementsRequired: 3,
-      minimumScore: 80,
+      xpRequired: 0, // Not used for progression
+      modulesRequired: 3, // Complete Module 3 (Comprensión Crítica)
+      mlCoinsThreshold: 0, // Not used for progression
+      achievementsRequired: 0, // Not used for progression
+      minimumScore: 70, // Kept as quality gate
       multiplier: 1.5,
-      mlBonus: 100,
+      mlBonus: 100, // PDF: +100 ML al completar
     },
     guerrero: {
       rank: 'guerrero',
-      xpRequired: 3000,
-      modulesRequired: 3,
-      mlCoinsThreshold: 1000,
-      achievementsRequired: 6,
-      minimumScore: 85,
+      xpRequired: 0, // Not used for progression
+      modulesRequired: 4, // Complete Module 4 (Lectura Digital)
+      mlCoinsThreshold: 0, // Not used for progression
+      achievementsRequired: 0, // Not used for progression
+      minimumScore: 70, // Kept as quality gate
       multiplier: 1.75,
-      mlBonus: 125,
+      mlBonus: 125, // PDF: +125 ML al completar
     },
     mercenario: {
       rank: 'mercenario',
-      xpRequired: 5000,
-      modulesRequired: 5,
-      mlCoinsThreshold: 2000,
-      achievementsRequired: 10,
-      minimumScore: 90,
+      xpRequired: 0, // Not used for progression
+      modulesRequired: 5, // Complete Module 5 (Producción Lectora)
+      mlCoinsThreshold: 0, // Not used for progression
+      achievementsRequired: 0, // Not used for progression
+      minimumScore: 70, // Kept as quality gate
       multiplier: 2.0,
-      mlBonus: 150,
+      mlBonus: 150, // PDF: +150 ML al completar
     },
   };
 
@@ -170,6 +172,8 @@ export class RanksRepository {
 
   /**
    * Check if user can be promoted to next rank
+   * PDF Decision: Progression based on completing modules (qualitative)
+   * Only validates: modules_completed and minimum_score (as quality gate)
    */
   async checkPromotion(userId: string, dbClient?: PoolClient): Promise<{
     canPromote: boolean;
@@ -204,35 +208,22 @@ export class RanksRepository {
 
     const missingRequirements: string[] = [];
 
-    if (progress.total_xp < requirements.xpRequired) {
-      missingRequirements.push(
-        `XP: ${progress.total_xp}/${requirements.xpRequired} (need ${requirements.xpRequired - progress.total_xp} more)`
-      );
-    }
-
+    // PRIMARY REQUIREMENT: Complete required number of modules (as per PDF)
     if (progress.modules_completed < requirements.modulesRequired) {
       missingRequirements.push(
         `Modules: ${progress.modules_completed}/${requirements.modulesRequired} (need ${requirements.modulesRequired - progress.modules_completed} more)`
       );
     }
 
-    if (progress.ml_coins_earned_total < requirements.mlCoinsThreshold) {
-      missingRequirements.push(
-        `ML Coins earned: ${progress.ml_coins_earned_total}/${requirements.mlCoinsThreshold} (need ${requirements.mlCoinsThreshold - progress.ml_coins_earned_total} more)`
-      );
-    }
-
-    if (progress.achievements_earned < requirements.achievementsRequired) {
-      missingRequirements.push(
-        `Achievements: ${progress.achievements_earned}/${requirements.achievementsRequired} (need ${requirements.achievementsRequired - progress.achievements_earned} more)`
-      );
-    }
-
+    // QUALITY GATE: Minimum average score (kept as quality standard)
     if (progress.average_score < requirements.minimumScore) {
       missingRequirements.push(
         `Average score: ${progress.average_score}%/${requirements.minimumScore}% (need ${requirements.minimumScore - progress.average_score}% more)`
       );
     }
+
+    // NOTE: XP, ML Coins, and Achievements are NOT used for rank progression as per PDF spec
+    // These are tracked for gamification purposes but don't gate rank advancement
 
     return {
       canPromote: missingRequirements.length === 0,
@@ -372,6 +363,8 @@ export class RanksRepository {
 
   /**
    * Calculate rank progress percentage
+   * PDF Decision: Progress based primarily on modules completed
+   * Secondary factor: Average score (quality gate)
    */
   calculateRankProgress(currentRank: string, userProgress: any): number {
     const currentIndex = this.RANK_ORDER.indexOf(currentRank);
@@ -383,18 +376,14 @@ export class RanksRepository {
     const nextRank = this.RANK_ORDER[currentIndex + 1];
     const requirements = this.RANK_REQUIREMENTS[nextRank];
 
-    // Calculate progress for each requirement
-    const xpProgress = Math.min((userProgress.total_xp / requirements.xpRequired) * 100, 100);
+    // PRIMARY: Modules completed (80% weight)
     const modulesProgress = Math.min((userProgress.modules_completed / requirements.modulesRequired) * 100, 100);
-    const coinsProgress = Math.min((userProgress.ml_coins_earned_total / requirements.mlCoinsThreshold) * 100, 100);
-    const achievementsProgress =
-      requirements.achievementsRequired > 0
-        ? Math.min((userProgress.achievements_earned / requirements.achievementsRequired) * 100, 100)
-        : 100;
+
+    // SECONDARY: Average score quality gate (20% weight)
     const scoreProgress = Math.min((userProgress.average_score / requirements.minimumScore) * 100, 100);
 
-    // Average progress across all requirements
-    const totalProgress = (xpProgress + modulesProgress + coinsProgress + achievementsProgress + scoreProgress) / 5;
+    // Weighted average: 80% modules, 20% score
+    const totalProgress = (modulesProgress * 0.8) + (scoreProgress * 0.2);
 
     return Math.round(totalProgress);
   }
