@@ -101,13 +101,14 @@ export class GamificationRepository {
         `INSERT INTO gamification_system.ml_coins_transactions (
           user_id,
           amount,
+          balance_before,
+          balance_after,
           transaction_type,
           reason,
-          reference_id,
-          balance_after
+          reference_id
         )
-        VALUES ($1, $2, $3, $4, $5, $6)`,
-        [userId, amount, transactionType, reason, referenceId, newBalance]
+        VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [userId, amount, currentBalance, newBalance, transactionType, reason, referenceId]
       );
 
       await client.query('COMMIT');
@@ -288,13 +289,16 @@ export class GamificationRepository {
           `INSERT INTO gamification_system.ml_coins_transactions (
             user_id,
             amount,
+            balance_before,
+            balance_after,
             transaction_type,
             reason,
-            reference_id,
-            balance_after
+            reference_id
           )
-          SELECT $1, $2, 'earned_achievement', $3, $4,
-                 (SELECT ml_coins FROM gamification_system.user_stats WHERE user_id = $1)`,
+          SELECT $1, $2,
+                 (SELECT ml_coins - $2 FROM gamification_system.user_stats WHERE user_id = $1),
+                 (SELECT ml_coins FROM gamification_system.user_stats WHERE user_id = $1),
+                 'earned_achievement', $3, $4`,
           [userId, mlCoinsReward, `Achievement: ${achievement.name}`, achievementId]
         );
       }

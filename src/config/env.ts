@@ -82,7 +82,9 @@ export const envConfig: EnvConfig = {
 
   // JWT
   jwt: {
-    secret: getEnv('JWT_SECRET', 'default_secret_change_in_production'),
+    secret: process.env.NODE_ENV === 'production'
+      ? getEnv('JWT_SECRET')  // No default in production - will throw if not set
+      : getEnv('JWT_SECRET', 'dev_secret_not_for_production_use'),
     expiresIn: getEnv('JWT_EXPIRES_IN', '7d'),
     refreshExpiresIn: getEnv('JWT_REFRESH_EXPIRES_IN', '30d'),
   },
@@ -109,12 +111,14 @@ export function validateEnv(): void {
     );
   }
 
-  // Warn about default JWT secret in production
-  if (
-    envConfig.nodeEnv === 'production' &&
-    envConfig.jwt.secret === 'default_secret_change_in_production'
-  ) {
-    console.warn('⚠️  WARNING: Using default JWT secret in production!');
+  // Validate JWT secret strength in production
+  if (envConfig.nodeEnv === 'production') {
+    if (envConfig.jwt.secret.length < 32) {
+      throw new Error(
+        'JWT_SECRET must be at least 32 characters in production. ' +
+        'Generate with: openssl rand -base64 32'
+      );
+    }
   }
 
   console.log('✓ Environment variables validated');

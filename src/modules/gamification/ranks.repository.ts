@@ -314,13 +314,16 @@ export class RanksRepository {
         `INSERT INTO gamification_system.ml_coins_transactions (
           user_id,
           amount,
+          balance_before,
+          balance_after,
           transaction_type,
           reason,
-          reference_id,
-          balance_after
+          reference_id
         )
-        SELECT $1, $2, 'earned_rank', $3, $4,
-               (SELECT ml_coins FROM gamification_system.user_stats WHERE user_id = $1)`,
+        SELECT $1, $2,
+               (SELECT ml_coins - $2 FROM gamification_system.user_stats WHERE user_id = $1),
+               (SELECT ml_coins FROM gamification_system.user_stats WHERE user_id = $1),
+               'earned_rank', $3, $4`,
         [userId, requirements.mlBonus, `Promoted to ${nextRank} rank`, result.rows[0].id]
       );
 
