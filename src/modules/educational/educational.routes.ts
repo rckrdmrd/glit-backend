@@ -16,6 +16,14 @@ import { ActivitiesController } from '../progress/activities.controller';
 import { ActivitiesService } from '../progress/activities.service';
 import { authenticateJWT } from '../../middleware/auth.middleware';
 import { applyRLS } from '../../middleware/rls.middleware';
+import { validate } from '../../middleware/validation.middleware';
+import {
+  createModuleSchema,
+  updateModuleSchema,
+  createExerciseSchema,
+  updateExerciseSchema,
+  submitExerciseSchema,
+} from './validations/educational.validation';
 
 export function createEducationalRoutes(pool: Pool): Router {
   const router = Router();
@@ -46,8 +54,8 @@ export function createEducationalRoutes(pool: Pool): Router {
   router.get('/modules/user/:userId', authenticateJWT, applyRLS, modulesController.getUserModules);
 
   // Admin routes (authentication required)
-  router.post('/modules', authenticateJWT, modulesController.createModule);
-  router.put('/modules/:moduleId', authenticateJWT, modulesController.updateModule);
+  router.post('/modules', authenticateJWT, validate(createModuleSchema), modulesController.createModule);
+  router.put('/modules/:moduleId', authenticateJWT, validate(updateModuleSchema), modulesController.updateModule);
   router.delete('/modules/:moduleId', authenticateJWT, modulesController.deleteModule);
   router.patch('/modules/:moduleId/publish', authenticateJWT, modulesController.updatePublishStatus);
 
@@ -59,12 +67,15 @@ export function createEducationalRoutes(pool: Pool): Router {
   router.get('/exercises', exercisesController.getAllExercises);
   router.get('/exercises/:exerciseId', exercisesController.getExerciseById);
 
+  // Mechanics/hints routes
+  router.get('/mechanics/:exerciseId/hints', exercisesController.getExerciseHints);
+
   // Student routes (authentication required)
-  router.post('/exercises/:exerciseId/submit', authenticateJWT, applyRLS, exercisesController.submitExercise);
+  router.post('/exercises/:exerciseId/submit', authenticateJWT, applyRLS, validate(submitExerciseSchema), exercisesController.submitExercise);
 
   // Admin routes (authentication required)
-  router.post('/exercises', authenticateJWT, exercisesController.createExercise);
-  router.put('/exercises/:exerciseId', authenticateJWT, exercisesController.updateExercise);
+  router.post('/exercises', authenticateJWT, validate(createExerciseSchema), exercisesController.createExercise);
+  router.put('/exercises/:exerciseId', authenticateJWT, validate(updateExerciseSchema), exercisesController.updateExercise);
   router.delete('/exercises/:exerciseId', authenticateJWT, exercisesController.deleteExercise);
 
   // ============================================================================

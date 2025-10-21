@@ -13,13 +13,22 @@ import { EmailVerificationService } from './email-verification.service';
 import { SessionManagementService } from './session-management.service';
 import { SecurityService } from './security.service';
 import { authenticateJWT } from '../../middleware/auth.middleware';
-import { validate } from '../../middleware/validation.middleware';
+import { validate, validateParams } from '../../middleware/validation.middleware';
 import {
   authRateLimiter,
   passwordResetRateLimiter,
   emailVerificationRateLimiter,
 } from '../../middleware/rate-limit.middleware';
-import Joi from 'joi';
+import {
+  registerSchema,
+  loginSchema,
+  refreshTokenSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
+  updatePasswordSchema,
+  verifyEmailSchema,
+  sessionIdSchema,
+} from './validations/auth.validation';
 import { pool } from '../../database/pool';
 
 // Initialize authentication module dependencies
@@ -41,45 +50,9 @@ const authController = new AuthController(
 const router = Router();
 
 /**
- * Validation schemas
- */
-const registerSchema = Joi.object({
-  email: Joi.string().email().required(),
-  password: Joi.string().min(8).required(),
-  firstName: Joi.string().min(2).optional(),
-  lastName: Joi.string().min(2).optional(),
-  role: Joi.string().valid('student', 'admin_teacher').optional(),
-});
-
-const loginSchema = Joi.object({
-  email: Joi.string().email().required(),
-  password: Joi.string().required(),
-});
-
-const refreshTokenSchema = Joi.object({
-  refreshToken: Joi.string().required(),
-});
-
-const updatePasswordSchema = Joi.object({
-  currentPassword: Joi.string().required(),
-  newPassword: Joi.string().min(8).required(),
-});
-
-const forgotPasswordSchema = Joi.object({
-  email: Joi.string().email().required(),
-});
-
-const resetPasswordSchema = Joi.object({
-  token: Joi.string().required(),
-  newPassword: Joi.string().min(8).required(),
-});
-
-const verifyEmailSchema = Joi.object({
-  token: Joi.string().required(),
-});
-
-/**
  * Public routes (no authentication required)
+ *
+ * All validation schemas imported from ./validations/auth.validation.ts
  */
 
 // POST /api/auth/register - Register new user
@@ -102,7 +75,7 @@ router.post(
 // POST /api/auth/reset-password - Reset password with token
 router.post('/reset-password', validate(resetPasswordSchema), authController.resetPassword);
 
-// POST /api/auth/verify-email - Verify email with token
+// POST /api/auth/verify-email - Verify email with token (DEPRECATED - email verification disabled)
 router.post('/verify-email', validate(verifyEmailSchema), authController.verifyEmail);
 
 /**
@@ -118,7 +91,7 @@ router.put('/password', authenticateJWT, validate(updatePasswordSchema), authCon
 // POST /api/auth/logout - Logout user
 router.post('/logout', authenticateJWT, authController.logout);
 
-// POST /api/auth/resend-verification - Resend verification email
+// POST /api/auth/resend-verification - Resend verification email (DEPRECATED - email verification disabled)
 router.post(
   '/resend-verification',
   authenticateJWT,
@@ -134,7 +107,7 @@ router.post(
 router.get('/sessions', authenticateJWT, authController.getSessions);
 
 // DELETE /api/auth/sessions/:sessionId - Revoke specific session
-router.delete('/sessions/:sessionId', authenticateJWT, authController.revokeSession);
+router.delete('/sessions/:sessionId', authenticateJWT, validateParams(sessionIdSchema), authController.revokeSession);
 
 // DELETE /api/auth/sessions/all - Revoke all sessions except current
 router.delete('/sessions/all', authenticateJWT, authController.revokeAllSessions);
