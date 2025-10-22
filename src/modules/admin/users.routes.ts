@@ -35,6 +35,12 @@ router.post('/:id/suspend', usersController.suspendUser);
 // POST /api/admin/users/:id/unsuspend - Unsuspend user
 router.post('/:id/unsuspend', usersController.unsuspendUser);
 
+// POST /api/admin/users/:id/activate - Activate user
+router.post('/:id/activate', usersController.activateUser);
+
+// POST /api/admin/users/:id/deactivate - Deactivate user
+router.post('/:id/deactivate', usersController.deactivateUser);
+
 // POST /api/admin/users/:id/reset-password - Force password reset
 router.post('/:id/reset-password', usersController.forcePasswordReset);
 

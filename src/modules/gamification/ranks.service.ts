@@ -8,10 +8,17 @@ import { RanksRepository, RankRequirements, UserRankData } from './ranks.reposit
 import { AppError } from '../../middleware/error.middleware';
 import { ErrorCode } from '../../shared/types';
 import { log } from '../../shared/utils/logger';
-import { PoolClient } from 'pg';
+import { PoolClient, Pool } from 'pg';
+import { AchievementsService } from './achievements.service';
 
 export class RanksService {
-  constructor(private ranksRepository: RanksRepository) {}
+  private achievementsService: AchievementsService | null = null;
+
+  constructor(private ranksRepository: RanksRepository, private pool?: Pool) {
+    if (pool) {
+      this.achievementsService = new AchievementsService(pool);
+    }
+  }
 
   /**
    * Get all Maya rank requirements
@@ -152,6 +159,25 @@ export class RanksService {
 
       log.info(`User ${userId} successfully promoted to ${newRank.current_rank}`);
 
+      // Check for rank-based achievements after promotion
+      if (this.achievementsService) {
+        try {
+          const unlockedAchievements = await this.achievementsService.checkAndUnlockAchievements(
+            userId,
+            {
+              // Context for rank up achievements
+            }
+          );
+
+          if (unlockedAchievements.length > 0) {
+            log.info(`User ${userId} unlocked ${unlockedAchievements.length} rank achievements`);
+          }
+        } catch (error) {
+          log.error('Error checking rank achievements after promotion:', error);
+          // Don't fail promotion if achievement check fails
+        }
+      }
+
       return {
         newRank,
         rewards: {
@@ -222,6 +248,7 @@ export class RanksService {
   async autoCheckPromotion(userId: string, dbClient?: PoolClient): Promise<{
     promoted: boolean;
     newRank?: string;
+    previousRank?: string;
     rewards?: any;
   }> {
     try {
@@ -232,6 +259,7 @@ export class RanksService {
         return {
           promoted: true,
           newRank: promotion.newRank.current_rank,
+          previousRank: promotion.newRank.previous_rank || undefined,
           rewards: promotion.rewards,
         };
       }

@@ -186,34 +186,49 @@ export const updateExerciseSchema = createExerciseSchema.fork(
  * Exercise submission validation schema
  */
 export const submitExerciseSchema = Joi.object({
-  exerciseId: uuidSchema.required(),
+  // Support both answer and answers for backward compatibility
+  answer: Joi.alternatives()
+    .try(
+      Joi.object(),  // For object-based answers
+      Joi.array(),   // For array-based answers
+      Joi.string(),  // For text-based answers
+      Joi.number(),  // For numeric answers
+      Joi.boolean(), // For boolean answers
+    )
+    .optional(),
   answers: Joi.alternatives()
     .try(
       Joi.object(),  // For object-based answers
       Joi.array(),   // For array-based answers
       Joi.string(),  // For text-based answers
+      Joi.number(),  // For numeric answers
+      Joi.boolean(), // For boolean answers
+    )
+    .optional(),
+  startedAt: Joi.alternatives()
+    .try(
+      Joi.number(),  // Unix timestamp (milliseconds)
+      Joi.date(),    // Date object
+      Joi.string()   // ISO date string
     )
     .required()
     .messages({
-      'any.required': 'Answers are required',
+      'any.required': 'Start time is required for anti-cheat validation',
     }),
-  timeSpent: Joi.number()
+  hintsUsed: Joi.number()
     .integer()
     .min(0)
-    .required()
+    .default(0)
     .messages({
-      'number.min': 'Time spent must be a positive number',
-      'any.required': 'Time spent is required',
+      'number.min': 'Hints used must be a non-negative number',
     }),
-  hintsUsed: Joi.array()
-    .items(Joi.number().integer().min(0))
-    .optional()
-    .default([]),
   powerupsUsed: Joi.array()
-    .items(uuidSchema)
+    .items(Joi.string().valid('pistas', 'vision_lectora', 'segunda_oportunidad'))
     .optional()
     .default([]),
-});
+  sessionId: Joi.string().optional(),
+  attemptNumber: Joi.number().integer().min(1).default(1),
+}).or('answer', 'answers'); // At least one of answer or answers is required
 
 /**
  * Progress query validation schema

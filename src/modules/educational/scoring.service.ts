@@ -14,9 +14,34 @@ import {
   ScoreResult,
   ComodinType
 } from './educational.types';
+import { RanksService } from '../gamification/ranks.service';
+import { StreaksService } from '../gamification/streaks.service';
+import { AchievementsService } from '../gamification/achievements.service';
+import { ProgressService } from './progress.service';
+import { log } from '../../shared/utils/logger';
+import {
+  notifyAchievementUnlocked,
+  notifyRankUp
+} from '../notifications/notifications.helper';
+import {
+  notifyExerciseCompleted,
+  notifyMLCoinsEarned,
+  notifyXPEarned
+} from '../gamification/missions/missions.events';
 
 export class ScoringService {
-  constructor(private pool: Pool) {}
+  private streaksService: StreaksService;
+  private achievementsService: AchievementsService;
+  private progressService: ProgressService;
+
+  constructor(
+    private pool: Pool,
+    private ranksService: RanksService
+  ) {
+    this.streaksService = new StreaksService(pool);
+    this.achievementsService = new AchievementsService(pool);
+    this.progressService = new ProgressService(this.pool);
+  }
 
   /**
    * Calculate score for exercise attempt
@@ -46,11 +71,121 @@ export class ScoringService {
       scoreResult
     );
 
-    // Award rewards (ML Coins, XP)
-    await this.awardRewards(submission.userId, scoreResult);
+    // NOTE: Rewards are automatically awarded by database trigger
+    // trg_update_user_stats_on_exercise when inserting into exercise_attempts
+    // No need to call awardRewards() here to avoid duplication
 
-    // Check for achievements
-    const achievements = await this.checkAchievements(submission.userId, scoreResult);
+    // Update streak after activity
+    try {
+      await this.streaksService.onUserActivity(submission.userId);
+      log.info(`Streak updated for user ${submission.userId} after exercise completion`);
+    } catch (error) {
+      // Don't fail the entire request if streak update fails
+      log.error('Error updating streak:', error);
+    }
+
+    // Check for achievements after exercise completion
+    const achievements = await this.checkAchievements(submission.userId, submission.exerciseId, scoreResult, submission.timeSpent, submission.powerupsUsed?.length || 0);
+
+    // Send notifications for unlocked achievements
+    if (achievements && achievements.length > 0) {
+      for (const achievement of achievements) {
+        try {
+          await notifyAchievementUnlocked(
+            submission.userId,
+            achievement.id,
+            achievement.name,
+            achievement.iconUrl || '🏆',
+            achievement.rewards?.mlCoins || 0
+          );
+        } catch (error) {
+          log.error('Error sending achievement notification:', error);
+        }
+      }
+    }
+
+    // Auto-check for rank promotion after awarding XP
+    let rankUp = null;
+    try {
+      const promotionResult = await this.ranksService.autoCheckPromotion(submission.userId);
+
+      if (promotionResult.promoted) {
+        log.info(
+          `User ${submission.userId} promoted from ${promotionResult.previousRank || 'unknown'} to ${promotionResult.newRank}!`
+        );
+
+        rankUp = {
+          newRank: promotionResult.newRank,
+          previousRank: promotionResult.previousRank,
+          bonusMLCoins: promotionResult.rewards?.mlCoins || 0,
+          newMultiplier: promotionResult.rewards?.multiplier || 1.0
+        };
+
+        // Send rank up notification
+        try {
+          await notifyRankUp(
+            submission.userId,
+            promotionResult.newRank!,
+            promotionResult.previousRank || 'nacom',
+            promotionResult.rewards?.mlCoins || 0
+          );
+        } catch (error) {
+          log.error('Error sending rank up notification:', error);
+        }
+      }
+    } catch (error) {
+      // Don't fail the entire request if promotion check fails
+      log.error('Error checking rank promotion:', error);
+    }
+
+    // Update module progress after successful exercise completion
+    if (scoreResult.finalScore >= (exercise.passingScore || 70)) {
+      try {
+        await this.progressService.updateModuleProgress(submission.userId, exercise.moduleId, true);
+        log.info(`Module progress updated for user ${submission.userId}, module ${exercise.moduleId}`);
+      } catch (error) {
+        // Don't fail the entire request if progress update fails
+        log.error('Error updating module progress:', error);
+      }
+    }
+
+    // Notify missions system about exercise completion
+    if (scoreResult.finalScore >= (exercise.passingScore || 70)) {
+      try {
+        // Exercise completion event
+        await notifyExerciseCompleted(submission.userId, {
+          exerciseId: submission.exerciseId,
+          exerciseType: exercise.exerciseType,
+          score: scoreResult.finalScore,
+          isPerfect: scoreResult.finalScore === 100,
+          difficulty: exercise.difficulty,
+          moduleId: exercise.moduleId,
+        });
+
+        // ML Coins earned event
+        if (scoreResult.mlCoins > 0) {
+          await notifyMLCoinsEarned(submission.userId, {
+            amount: scoreResult.mlCoins,
+            source: 'exercise_completion',
+            exerciseId: submission.exerciseId,
+          });
+        }
+
+        // XP earned event
+        if (scoreResult.xp > 0) {
+          await notifyXPEarned(submission.userId, {
+            amount: scoreResult.xp,
+            source: 'exercise_completion',
+            exerciseId: submission.exerciseId,
+          });
+        }
+
+        log.info(`Mission events triggered for user ${submission.userId}`);
+      } catch (error) {
+        // Don't fail the request if mission update fails
+        log.error('Error notifying mission system:', error);
+      }
+    }
 
     // Generate feedback
     const feedback = this.generateFeedback(submission.answers, exercise, scoreResult);
@@ -68,6 +203,7 @@ export class ScoringService {
       },
       feedback,
       achievements,
+      rankUp,
       createdAt: new Date()
     };
   }
@@ -81,7 +217,7 @@ export class ScoringService {
     switch (exerciseType) {
       // ========== AUTOMATIC SCORING (13 types) ==========
 
-      case ExerciseType.CRUCIGRAMA_CIENTIFICO:
+      case ExerciseType.CRUCIGRAMA:
         return this.scoreCrucigrama(answers, exercise);
 
       case ExerciseType.SOPA_LETRAS:
@@ -90,7 +226,7 @@ export class ScoringService {
       case ExerciseType.EMPAREJAMIENTO:
         return this.scoreEmparejamiento(answers, exercise);
 
-      case ExerciseType.LINEA_TIEMPO_VISUAL:
+      case ExerciseType.LINEA_TIEMPO:
         return this.scoreLineaTiempo(answers, exercise);
 
       case ExerciseType.QUIZ_TIKTOK:
@@ -98,6 +234,12 @@ export class ScoringService {
 
       case ExerciseType.COMPRENSION_AUDITIVA:
         return this.scoreComprensionAuditiva(answers, exercise);
+
+      case ExerciseType.VERDADERO_FALSO:
+        return this.scoreVerdaderoFalso(answers, exercise);
+
+      case ExerciseType.COMPLETAR_ESPACIOS:
+        return this.scoreCompletarEspacios(answers, exercise);
 
       case ExerciseType.NAVEGACION_HIPERTEXTUAL:
         return this.scoreNavegacionHipertextual(answers, exercise);
@@ -208,15 +350,71 @@ export class ScoringService {
   private scoreLineaTiempo(answers: any, exercise: ExerciseResponse): number {
     const content = exercise.content as any;
     const events = content.events || [];
-    let correctPositions = 0;
 
-    events.forEach((event: any, index: number) => {
-      if (answers.positions?.[event.id] === event.correctPosition) {
+    // Sort events by year to get correct order
+    const correctOrder = [...events]
+      .sort((a, b) => a.year - b.year)
+      .map(event => event.id);
+
+    // Get user's answer order
+    const userOrder = answers.order || [];
+
+    // Count how many events are in correct position
+    let correctPositions = 0;
+    for (let i = 0; i < correctOrder.length; i++) {
+      if (userOrder[i] === correctOrder[i]) {
         correctPositions++;
+      }
+    }
+
+    return (correctPositions / events.length) * 100;
+  }
+
+  /**
+   * Score Verdadero/Falso
+   */
+  private scoreVerdaderoFalso(answers: any, exercise: ExerciseResponse): number {
+    const content = exercise.content as any;
+    const statements = content.statements || [];
+    let correctAnswers = 0;
+
+    statements.forEach((statement: any, index: number) => {
+      const userAnswer = answers.responses?.[index] || answers[index];
+      if (userAnswer === statement.correctAnswer || userAnswer === statement.isTrue) {
+        correctAnswers++;
       }
     });
 
-    return (correctPositions / events.length) * 100;
+    return (correctAnswers / statements.length) * 100;
+  }
+
+  /**
+   * Score Completar Espacios (Fill in the blanks)
+   */
+  private scoreCompletarEspacios(answers: any, exercise: ExerciseResponse): number {
+    const content = exercise.content as any;
+    const blanks = content.blanks || [];
+    let correctAnswers = 0;
+
+    blanks.forEach((blank: any, index: number) => {
+      const userAnswer = (answers.responses?.[index] || answers[index] || '').toString().trim().toLowerCase();
+      const correctAnswer = blank.correctAnswer.toString().trim().toLowerCase();
+
+      // Check if user answer matches correct answer (case-insensitive)
+      if (userAnswer === correctAnswer) {
+        correctAnswers++;
+      } else if (blank.acceptedAnswers && Array.isArray(blank.acceptedAnswers)) {
+        // Check alternative accepted answers
+        const isAccepted = blank.acceptedAnswers.some((accepted: string) =>
+          accepted.toString().trim().toLowerCase() === userAnswer
+        );
+        if (isAccepted) {
+          correctAnswers++;
+        }
+      }
+    });
+
+    return (correctAnswers / blanks.length) * 100;
   }
 
   /**
@@ -339,7 +537,7 @@ export class ScoringService {
     userStats: any
   ): ScoreResult {
     const multipliers = {
-      difficulty: this.getDifficultyMultiplier(exercise.difficulty),
+      difficulty: this.getDifficultyMultiplier(exercise.difficultyLevel),
       rank: this.getRankMultiplier(userStats.currentRank),
       streak: this.getStreakMultiplier(userStats.streakDays)
     };
@@ -443,16 +641,33 @@ export class ScoringService {
    * Get user stats for multipliers
    */
   private async getUserStats(userId: string): Promise<any> {
+    // First, get profile_id from auth user_id
+    // userId comes from JWT (auth.users.id) but gamification tables use profile_id
+    const profileQuery = `
+      SELECT p.id as profile_id
+      FROM auth_management.profiles p
+      WHERE p.user_id = $1
+    `;
+    const profileResult = await this.pool.query(profileQuery, [userId]);
+
+    if (!profileResult.rows[0]) {
+      // If profile doesn't exist, return default values
+      return { currentRank: 'nacom', streakDays: 0, totalXP: 0 };
+    }
+
+    const profileId = profileResult.rows[0].profile_id;
+
     const query = `
       SELECT
-        current_rank as "currentRank",
-        streak_days as "streakDays",
-        total_xp as "totalXP"
-      FROM gamification_system.user_stats
-      WHERE user_id = $1
+        ur.current_rank as "currentRank",
+        us.current_streak as "streakDays",
+        us.total_xp as "totalXP"
+      FROM gamification_system.user_stats us
+      LEFT JOIN gamification_system.user_ranks ur ON us.user_id = ur.user_id AND ur.is_current = true
+      WHERE us.user_id = $1
     `;
 
-    const result = await this.pool.query(query, [userId]);
+    const result = await this.pool.query(query, [profileId]);
     return result.rows[0] || { currentRank: 'nacom', streakDays: 0, totalXP: 0 };
   }
 
@@ -464,6 +679,20 @@ export class ScoringService {
     exercise: ExerciseResponse,
     scoreResult: ScoreResult
   ): Promise<string> {
+    // Get profile_id from user_id (auth.users.id -> auth_management.profiles.id)
+    const profileQuery = `
+      SELECT p.id as profile_id
+      FROM auth_management.profiles p
+      WHERE p.user_id = $1
+    `;
+    const profileResult = await this.pool.query(profileQuery, [submission.userId]);
+
+    if (!profileResult.rows[0]) {
+      throw new Error(`Profile not found for user ${submission.userId}`);
+    }
+
+    const profileId = profileResult.rows[0].profile_id;
+
     const query = `
       INSERT INTO progress_tracking.exercise_attempts (
         user_id, exercise_id, submitted_answers, score,
@@ -474,11 +703,11 @@ export class ScoringService {
     `;
 
     const values = [
-      submission.userId,
+      profileId,  // Use profile_id instead of auth user_id
       submission.exerciseId,
       submission.answers,
       scoreResult.finalScore,
-      scoreResult.finalScore >= (exercise.pointsReward * 0.7), // 70% passing
+      scoreResult.finalScore >= (exercise.passingScore || 70), // 70% passing
       submission.timeSpent,
       submission.powerupsUsed,
       scoreResult.xp,
@@ -493,27 +722,52 @@ export class ScoringService {
    * Award ML Coins and XP
    */
   private async awardRewards(userId: string, scoreResult: ScoreResult): Promise<void> {
-    // Update user_stats
+    // Update user_stats (total_exercises_completed is calculated from exercise_attempts)
     const query = `
       UPDATE gamification_system.user_stats
       SET
         total_xp = total_xp + $1,
         ml_coins = ml_coins + $2,
         ml_coins_earned_total = ml_coins_earned_total + $2,
-        total_exercises_completed = total_exercises_completed + 1,
         updated_at = NOW()
       WHERE user_id = $3
     `;
 
     await this.pool.query(query, [scoreResult.xp, scoreResult.mlCoins, userId]);
+
+    log.info(`Awarded ${scoreResult.xp} XP and ${scoreResult.mlCoins} ML Coins to user ${userId}`);
   }
 
   /**
-   * Check for achievements
+   * Check for achievements after exercise completion
    */
-  private async checkAchievements(userId: string, scoreResult: ScoreResult): Promise<any[]> {
-    // Simplified - would implement full achievement checking logic
-    return [];
+  private async checkAchievements(userId: string, exerciseId: string, scoreResult: ScoreResult, timeSpent: number, hintsUsed: number): Promise<any[]> {
+    try {
+      const unlockedAchievements = await this.achievementsService.checkAndUnlockAchievements(
+        userId,
+        {
+          exerciseId: exerciseId,
+          score: scoreResult.finalScore,
+          hintsUsed: hintsUsed,
+          timeSpent: timeSpent
+        }
+      );
+
+      // Return achievements in the format expected by the frontend
+      return unlockedAchievements.map(achievement => ({
+        id: achievement.id,
+        name: achievement.name,
+        description: achievement.description,
+        icon: achievement.icon,
+        category: achievement.category,
+        mlCoinsReward: achievement.mlCoinsReward,
+        xpReward: achievement.xpReward,
+        rarity: achievement.rarity
+      }));
+    } catch (error) {
+      log.error('Error checking achievements after exercise:', error);
+      return []; // Don't fail the entire request if achievement check fails
+    }
   }
 
   /**

@@ -17,12 +17,18 @@ export class AuthRepository {
    * Find user by email
    *
    * @param email - User email
-   * @returns User object or null if not found
+   * @returns User object with profile data, or null if not found
    */
-  async findUserByEmail(email: string): Promise<User | null> {
+  async findUserByEmail(email: string): Promise<any | null> {
     try {
-      const result = await this.pool.query<User>(
-        'SELECT * FROM auth.users WHERE email = $1 AND deleted_at IS NULL',
+      const result = await this.pool.query(
+        `SELECT
+          u.*,
+          p.status,
+          p.email_verified
+        FROM auth.users u
+        LEFT JOIN auth_management.profiles p ON u.id = p.user_id
+        WHERE u.email = $1 AND u.deleted_at IS NULL`,
         [email.toLowerCase()]
       );
 
@@ -37,12 +43,18 @@ export class AuthRepository {
    * Find user by ID
    *
    * @param userId - User ID
-   * @returns User object or null if not found
+   * @returns User object with profile data, or null if not found
    */
-  async findUserById(userId: string): Promise<User | null> {
+  async findUserById(userId: string): Promise<any | null> {
     try {
-      const result = await this.pool.query<User>(
-        'SELECT * FROM auth.users WHERE id = $1 AND deleted_at IS NULL',
+      const result = await this.pool.query(
+        `SELECT
+          u.*,
+          p.status,
+          p.email_verified
+        FROM auth.users u
+        LEFT JOIN auth_management.profiles p ON u.id = p.user_id
+        WHERE u.id = $1 AND u.deleted_at IS NULL`,
         [userId]
       );
 
@@ -58,6 +70,10 @@ export class AuthRepository {
    *
    * @param userData - User creation data
    * @returns Created user object
+   *
+   * NOTE: Email verification is disabled - users are created with verified status.
+   * Database trigger handles setting email_verified = true and is_active = true by default.
+   * The email_confirmed_at timestamp is set immediately during registration.
    */
   async createUser(userData: CreateUserData): Promise<User> {
     const client = await this.pool.connect();
@@ -66,6 +82,8 @@ export class AuthRepository {
       await client.query('BEGIN');
 
       // Create user in auth.users table
+      // email_confirmed_at is set to NOW() to mark email as immediately verified
+      // Database trigger will also set email_verified = true and is_active = true in profiles table
       const userResult = await client.query<User>(
         `INSERT INTO auth.users (
           email,
@@ -116,30 +134,10 @@ export class AuthRepository {
 
       const profileId = profileResult.rows[0].id;
 
-      // Initialize user stats in gamification_system.user_stats
-      await client.query(
-        `INSERT INTO gamification_system.user_stats (
-          user_id,
-          ml_coins,
-          tenant_id
-        )
-        VALUES ($1, 100, $2)
-        ON CONFLICT (user_id) DO NOTHING`,
-        [profileId, tenantId]
-      );
-
-      // Initialize user rank in gamification_system.user_ranks
-      await client.query(
-        `INSERT INTO gamification_system.user_ranks (
-          user_id,
-          tenant_id,
-          current_rank,
-          is_current
-        )
-        VALUES ($1, $2, 'nacom', true)
-        ON CONFLICT (user_id, current_rank) DO NOTHING`,
-        [profileId, tenantId]
-      );
+      // NOTE: Gamification initialization (user_stats, user_ranks, comodines_inventory)
+      // is handled automatically by the database trigger: trg_initialize_user_stats
+      // This trigger fires AFTER INSERT on auth_management.profiles
+      // No manual initialization needed here
 
       await client.query('COMMIT');
 
@@ -157,7 +155,7 @@ export class AuthRepository {
   /**
    * Update user last sign in timestamp
    *
-   * @param userId - User ID
+   * @param userId - User ID (from auth.users)
    */
   async updateLastSignIn(userId: string): Promise<void> {
     try {
@@ -167,8 +165,11 @@ export class AuthRepository {
       );
 
       // Update gamification stats last login
+      // Note: user_stats.user_id references profiles.id, not auth.users.id
       await this.pool.query(
-        'UPDATE gamification_system.user_stats SET last_login_at = NOW(), updated_at = NOW() WHERE user_id = $1',
+        `UPDATE gamification_system.user_stats
+         SET last_login_at = NOW(), updated_at = NOW()
+         WHERE user_id = (SELECT id FROM auth_management.profiles WHERE user_id = $1)`,
         [userId]
       );
     } catch (error) {

@@ -16,6 +16,8 @@ import {
   suspendUserBodySchema,
   forcePasswordResetBodySchema,
   userActivityQuerySchema,
+  activateUserBodySchema,
+  deactivateUserBodySchema,
   validateRequest,
 } from './users.validation';
 import { PaginationParams, UserFilters, UserUpdateData } from './admin.types';
@@ -552,6 +554,174 @@ export class UsersController {
         error: {
           code: ErrorCode.INTERNAL_ERROR,
           message: 'Failed to retrieve user activity',
+        },
+      });
+    }
+  };
+
+  /**
+   * POST /api/admin/users/:id/activate
+   *
+   * Activate a user account by setting is_active to true.
+   */
+  activateUser = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      if (!req.user) {
+        res.status(401).json({
+          success: false,
+          error: {
+            code: ErrorCode.UNAUTHORIZED,
+            message: 'Authentication required',
+          },
+        });
+        return;
+      }
+
+      // Validate parameters
+      const { id } = validateRequest<{ id: string }>(userIdParamSchema, req.params);
+      const { reason } = validateRequest<{ reason?: string }>(
+        activateUserBodySchema,
+        req.body
+      );
+
+      // Activate user
+      const updatedUser = await this.usersService.activateUser(req.user.id, id, reason);
+
+      res.status(200).json({
+        success: true,
+        data: updatedUser,
+        message: 'User activated successfully',
+      });
+    } catch (error) {
+      log.error('Error in activateUser controller:', error);
+
+      if ((error as any).code === 'VALIDATION_ERROR') {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: ErrorCode.VALIDATION_ERROR,
+            message: (error as any).message,
+            details: (error as any).details,
+          },
+        });
+        return;
+      }
+
+      if (error instanceof Error) {
+        if (error.message === 'User not found') {
+          res.status(404).json({
+            success: false,
+            error: {
+              code: ErrorCode.NOT_FOUND,
+              message: error.message,
+            },
+          });
+          return;
+        }
+
+        if (error.message === 'User is already active') {
+          res.status(400).json({
+            success: false,
+            error: {
+              code: ErrorCode.VALIDATION_ERROR,
+              message: error.message,
+            },
+          });
+          return;
+        }
+      }
+
+      res.status(500).json({
+        success: false,
+        error: {
+          code: ErrorCode.INTERNAL_ERROR,
+          message: 'Failed to activate user',
+        },
+      });
+    }
+  };
+
+  /**
+   * POST /api/admin/users/:id/deactivate
+   *
+   * Deactivate a user account by setting is_active to false.
+   * Requires a reason and prevents self-deactivation.
+   */
+  deactivateUser = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      if (!req.user) {
+        res.status(401).json({
+          success: false,
+          error: {
+            code: ErrorCode.UNAUTHORIZED,
+            message: 'Authentication required',
+          },
+        });
+        return;
+      }
+
+      // Validate parameters
+      const { id } = validateRequest<{ id: string }>(userIdParamSchema, req.params);
+      const { reason } = validateRequest<{ reason: string }>(
+        deactivateUserBodySchema,
+        req.body
+      );
+
+      // Deactivate user
+      const updatedUser = await this.usersService.deactivateUser(req.user.id, id, reason);
+
+      res.status(200).json({
+        success: true,
+        data: updatedUser,
+        message: 'User deactivated successfully',
+      });
+    } catch (error) {
+      log.error('Error in deactivateUser controller:', error);
+
+      if ((error as any).code === 'VALIDATION_ERROR') {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: ErrorCode.VALIDATION_ERROR,
+            message: (error as any).message,
+            details: (error as any).details,
+          },
+        });
+        return;
+      }
+
+      if (error instanceof Error) {
+        if (error.message === 'User not found') {
+          res.status(404).json({
+            success: false,
+            error: {
+              code: ErrorCode.NOT_FOUND,
+              message: error.message,
+            },
+          });
+          return;
+        }
+
+        if (
+          error.message === 'Cannot deactivate your own account' ||
+          error.message === 'User is already inactive'
+        ) {
+          res.status(400).json({
+            success: false,
+            error: {
+              code: ErrorCode.VALIDATION_ERROR,
+              message: error.message,
+            },
+          });
+          return;
+        }
+      }
+
+      res.status(500).json({
+        success: false,
+        error: {
+          code: ErrorCode.INTERNAL_ERROR,
+          message: 'Failed to deactivate user',
         },
       });
     }

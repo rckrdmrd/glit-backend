@@ -60,6 +60,11 @@ export class UsersRepository {
         }
       }
 
+      if (filters.is_active !== undefined) {
+        conditions.push(`p.is_active = $${paramCount++}`);
+        values.push(filters.is_active);
+      }
+
       if (filters.tenant_id) {
         conditions.push(`p.tenant_id = $${paramCount++}`);
         values.push(filters.tenant_id);
@@ -561,6 +566,50 @@ export class UsersRepository {
       return result.rows as UserActivity[];
     } catch (error) {
       log.error('Error getting user activity:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Activate User
+   *
+   * Activates a user account by setting is_active to true.
+   *
+   * @param userId - User ID
+   */
+  async activateUser(userId: string): Promise<void> {
+    try {
+      const query = `
+        UPDATE auth_management.profiles
+        SET is_active = true, updated_at = NOW()
+        WHERE user_id = $1
+      `;
+
+      await this.pool.query(query, [userId]);
+    } catch (error) {
+      log.error('Error activating user:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Deactivate User
+   *
+   * Deactivates a user account by setting is_active to false.
+   *
+   * @param userId - User ID
+   */
+  async deactivateUser(userId: string): Promise<void> {
+    try {
+      const query = `
+        UPDATE auth_management.profiles
+        SET is_active = false, updated_at = NOW()
+        WHERE user_id = $1
+      `;
+
+      await this.pool.query(query, [userId]);
+    } catch (error) {
+      log.error('Error deactivating user:', error);
       throw error;
     }
   }

@@ -22,6 +22,7 @@ import { LeaderboardController } from './leaderboard.controller';
 import { LeaderboardService } from './leaderboard.service';
 import { LeaderboardRepository } from './leaderboard.repository';
 import missionsRoutes from './missions/missions.routes';
+import leaderboardsRoutes from './leaderboards.routes';
 import { authenticateJWT } from '../../middleware/auth.middleware';
 import { applyRLS } from '../../middleware/rls.middleware';
 import { validate } from '../../middleware/validation.middleware';
@@ -44,7 +45,7 @@ const ranksController = new RanksController(ranksService);
 
 // ML Coins Economy
 const coinsRepository = new CoinsRepository(pool);
-const coinsService = new CoinsService(coinsRepository);
+const coinsService = new CoinsService(coinsRepository, ranksService);
 const coinsController = new CoinsController(coinsService);
 
 // Power-ups System
@@ -217,6 +218,13 @@ router.get('/leaderboard/user/:userId/position', authenticateJWT, applyRLS, lead
 
 // Mount missions routes under /missions
 router.use('/missions', missionsRoutes);
+
+// ============================================================================
+// MATERIALIZED LEADERBOARDS (NEW - BUG #4 FIX)
+// ============================================================================
+
+// Mount materialized leaderboards routes under /leaderboards
+router.use('/leaderboards', leaderboardsRoutes);
 
 // ============================================================================
 // LEGACY ENDPOINTS (compatibility)

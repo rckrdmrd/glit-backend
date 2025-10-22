@@ -12,6 +12,10 @@ import { log } from './shared/utils/logger';
 import { initializeSocketServer, disconnectAllSockets } from './websocket/socket.server';
 import { startMissionsCronJobs, stopMissionsCronJobs } from './modules/gamification/missions/missions.cron';
 import { startNotificationsCronJobs, stopNotificationsCronJobs } from './modules/notifications/notifications.cron';
+// TODO: Implement these cron jobs
+// import { startDailyResetCronJobs, stopDailyResetCronJobs } from './cron/daily-reset.cron';
+// import { startStreaksCronJobs, stopStreaksCronJobs } from './cron/streaks.cron';
+// import { startLeaderboardsCronJobs, stopLeaderboardsCronJobs } from './cron/leaderboards.cron';
 
 /**
  * Bootstrap Application
@@ -43,6 +47,10 @@ async function bootstrap(): Promise<void> {
     // Initialize cron jobs
     startMissionsCronJobs();
     startNotificationsCronJobs();
+    // TODO: Implement these cron jobs
+    // startDailyResetCronJobs();
+    // startStreaksCronJobs();
+    // startLeaderboardsCronJobs();
 
     // Start server
     httpServer.listen(PORT, () => {
@@ -70,6 +78,10 @@ async function bootstrap(): Promise<void> {
       // Stop cron jobs
       stopMissionsCronJobs();
       stopNotificationsCronJobs();
+      // TODO: Implement these cron jobs
+      // stopDailyResetCronJobs();
+      // stopStreaksCronJobs();
+      // stopLeaderboardsCronJobs();
 
       // Disconnect all WebSocket connections
       disconnectAllSockets();

@@ -6,7 +6,7 @@
 
 import { Router } from 'express';
 import { authenticateJWT } from '../../middleware/auth.middleware';
-import { requireSuperAdmin, adminRateLimit, auditAdminAction } from './admin.middleware';
+import { requireSuperAdmin, requireAdmin, adminRateLimit, auditAdminAction } from './admin.middleware';
 
 // Import sub-routes
 import usersRoutes from './users.routes';
@@ -22,17 +22,18 @@ import systemRoutes from './system.routes';
 export function createAdminRoutes(): Router {
   const router = Router();
 
-  // Apply global middleware to all admin routes
+  // Apply global middleware - authentication, rate limiting, audit
   router.use(authenticateJWT);
-  router.use(requireSuperAdmin);
   router.use(adminRateLimit);
   router.use(auditAdminAction);
 
-  // Mount sub-routes
-  router.use('/users', usersRoutes);
-  router.use('/organizations', organizationsRoutes);
-  router.use('/content', contentRoutes);
-  router.use('/system', systemRoutes);
+  // Mount user routes - accessible by super_admin AND admin_teacher
+  router.use('/users', requireAdmin, usersRoutes);
+
+  // Mount other routes - only super_admin
+  router.use('/organizations', requireSuperAdmin, organizationsRoutes);
+  router.use('/content', requireSuperAdmin, contentRoutes);
+  router.use('/system', requireSuperAdmin, systemRoutes);
 
   // Root admin endpoint - Dashboard stats
   router.get('/', async (req, res) => {

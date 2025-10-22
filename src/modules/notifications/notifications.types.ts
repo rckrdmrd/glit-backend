@@ -9,6 +9,7 @@
  */
 export enum NotificationType {
   ACHIEVEMENT_UNLOCKED = 'achievement_unlocked',
+  RANK_UP = 'rank_up',
   FRIEND_REQUEST = 'friend_request',
   GUILD_INVITATION = 'guild_invitation',
   MISSION_COMPLETED = 'mission_completed',
@@ -42,6 +43,8 @@ export interface NotificationData {
   achievement_id?: string;
   achievement_name?: string;
   achievement_icon?: string;
+  rank?: string;
+  previous_rank?: string;
   friend_id?: string;
   friend_name?: string;
   guild_id?: string;

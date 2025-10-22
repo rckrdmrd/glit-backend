@@ -3,6 +3,7 @@
  *
  * JWT authentication middleware for protected routes.
  * Verifies JWT tokens and attaches user information to request.
+ * Validates user is_active status and suspension state on every request.
  */
 
 import { Response, NextFunction } from 'express';
@@ -10,12 +11,14 @@ import jwt from 'jsonwebtoken';
 import { jwtConfig, JWTPayload } from '../config/jwt';
 import { AuthRequest, ErrorCode } from '../shared/types';
 import { log } from '../shared/utils/logger';
+import { pool } from '../database/pool';
 
 /**
  * Authenticate JWT Token Middleware
  *
  * Extracts and verifies JWT token from Authorization header.
  * Attaches decoded user information to request object.
+ * Validates user account is active and not suspended on every authenticated request.
  */
 export const authenticateJWT = async (
   req: AuthRequest,
@@ -42,6 +45,52 @@ export const authenticateJWT = async (
 
     // Verify token
     const payload = jwt.verify(token, jwtConfig.secret) as JWTPayload;
+
+    // Check user's current active status in database
+    // This ensures that even with a valid token, deactivated users cannot access resources
+    const userStatusResult = await pool.query(
+      `SELECT
+        u.id,
+        u.email,
+        u.role,
+        u.deleted_at,
+        p.status
+      FROM auth.users u
+      LEFT JOIN auth_management.profiles p ON u.id = p.user_id
+      WHERE u.id = $1`,
+      [payload.sub]
+    );
+
+    const user = userStatusResult.rows[0];
+
+    // User not found or deleted
+    if (!user || user.deleted_at) {
+      res.status(401).json({
+        success: false,
+        error: {
+          code: ErrorCode.ACCOUNT_INACTIVE,
+          message: 'Account is inactive',
+        },
+      });
+      return;
+    }
+
+    // Check if account is active (status field from profiles table)
+    // Status can be: 'active', 'inactive', 'suspended', 'pending'
+    if (user.status && user.status !== 'active') {
+      const message = user.status === 'suspended'
+        ? 'Your account has been suspended. Please contact support for assistance.'
+        : 'Your account has been deactivated. Please contact support for assistance.';
+
+      res.status(401).json({
+        success: false,
+        error: {
+          code: user.status === 'suspended' ? ErrorCode.ACCOUNT_SUSPENDED : ErrorCode.ACCOUNT_INACTIVE,
+          message,
+        },
+      });
+      return;
+    }
 
     // Attach user to request
     req.user = {

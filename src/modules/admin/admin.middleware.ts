@@ -85,6 +85,80 @@ export const requireSuperAdmin = async (
 };
 
 /**
+ * Require Admin Role Middleware
+ *
+ * Verifies that the authenticated user has super_admin or admin_teacher role.
+ * Logs unauthorized access attempts.
+ */
+export const requireAdmin = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({
+        success: false,
+        error: {
+          code: ErrorCode.UNAUTHORIZED,
+          message: 'Authentication required',
+        },
+      });
+      return;
+    }
+
+    const allowedRoles = ['super_admin', 'admin_teacher'];
+    if (!allowedRoles.includes(req.user.role)) {
+      // Log unauthorized admin access attempt
+      const auditService = new AuditService(pool);
+      await auditService.logEvent({
+        event_type: 'unauthorized_admin_access',
+        action: 'access_denied',
+        actor_id: req.user.id,
+        actor_type: 'user',
+        actor_ip: req.ip,
+        actor_user_agent: req.headers['user-agent'],
+        severity: 'warning',
+        status: 'failure',
+        description: `User ${req.user.email} (${req.user.role}) attempted to access admin endpoint: ${req.method} ${req.path}`,
+        additional_data: {
+          endpoint: req.path,
+          method: req.method,
+          user_role: req.user.role,
+        },
+      });
+
+      log.warn(
+        `Unauthorized admin access attempt by ${req.user.email} (${req.user.role}) to ${req.method} ${req.path}`
+      );
+
+      res.status(403).json({
+        success: false,
+        error: {
+          code: ErrorCode.FORBIDDEN,
+          message: 'Admin access required (super_admin or admin_teacher)',
+        },
+      });
+      return;
+    }
+
+    // Log successful admin access
+    log.debug(`Admin access granted to ${req.user.email} for ${req.method} ${req.path}`);
+
+    next();
+  } catch (error) {
+    log.error('Admin authorization error:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        code: ErrorCode.INTERNAL_ERROR,
+        message: 'Authorization check failed',
+      },
+    });
+  }
+};
+
+/**
  * Admin Action Audit Middleware
  *
  * Logs all admin actions to audit trail.

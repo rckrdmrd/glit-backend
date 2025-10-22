@@ -127,11 +127,15 @@ export class ExercisesRepository {
 
       const progressResult = await this.pool.query(progressQuery, [exerciseId, userId]);
       exercise.userProgress = progressResult.rows[0];
+      // Also set completed at top level for easy access
+      exercise.completed = progressResult.rows[0].completed || false;
     }
 
     return {
       ...exercise,
-      availablePowerups: exercise.comodinesAllowed || []
+      availablePowerups: exercise.comodinesAllowed || [],
+      // Ensure completed is always present, even if no userId
+      completed: exercise.completed || false
     };
   }
 

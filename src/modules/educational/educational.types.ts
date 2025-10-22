@@ -16,8 +16,8 @@
  */
 export enum ExerciseType {
   // Module 1 - Comprensión Literal (5)
-  CRUCIGRAMA_CIENTIFICO = 'crucigrama_cientifico',
-  LINEA_TIEMPO_VISUAL = 'linea_tiempo_visual',
+  CRUCIGRAMA = 'crucigrama',
+  LINEA_TIEMPO = 'linea_tiempo',
   SOPA_LETRAS = 'sopa_letras',
   MAPA_CONCEPTUAL = 'mapa_conceptual',
   EMPAREJAMIENTO = 'emparejamiento',
@@ -48,11 +48,15 @@ export enum ExerciseType {
   COMIC_DIGITAL = 'comic_digital',
   VIDEO_CARTA = 'video_carta',
 
-  // Auxiliares (4)
+  // Auxiliares (8)
   COMPRENSION_AUDITIVA = 'comprension_auditiva',
   COLLAGE_PRENSA = 'collage_prensa',
   TEXTO_MOVIMIENTO = 'texto_movimiento',
-  CALL_TO_ACTION = 'call_to_action'
+  CALL_TO_ACTION = 'call_to_action',
+  VERDADERO_FALSO = 'verdadero_falso',
+  COMPLETAR_ESPACIOS = 'completar_espacios',
+  DIARIO_INTERACTIVO = 'diario_interactivo',
+  RESUMEN_VISUAL = 'resumen_visual'
 }
 
 export enum DifficultyLevel {
@@ -219,8 +223,10 @@ export interface ExerciseResponse {
   instructions: string;
   exerciseType: ExerciseType;
   difficulty: DifficultyLevel;
+  difficultyLevel?: DifficultyLevel; // Alias for difficulty
   estimatedTimeMinutes: number;
   pointsReward: number;
+  passingScore: number; // Minimum score required to pass
   mlCoinsReward: number;
   xpReward: number;
   content: ExerciseContent;
@@ -492,6 +498,12 @@ export interface SubmissionResponse {
     icon: string;
     rarity: string;
   }>;
+  rankUp?: {
+    newRank: string;
+    previousRank?: string;
+    bonusMLCoins: number;
+    newMultiplier: number;
+  } | null;
   createdAt: Date;
 }
 

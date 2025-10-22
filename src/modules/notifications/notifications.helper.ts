@@ -25,7 +25,7 @@ const notificationsService = new NotificationsService(notificationsRepository);
 /**
  * Send notification to user (creates in DB and emits via WebSocket)
  *
- * @param dto - Notification data
+ * @param dto - Notification data (user_id should be auth user ID from JWT)
  * @param client - Optional database client for transactions
  */
 export async function sendNotificationToUser(
@@ -33,19 +33,42 @@ export async function sendNotificationToUser(
   client?: PoolClient
 ): Promise<void> {
   try {
-    // Create notification in database
-    const notification = await notificationsService.createNotification(dto, client);
+    // Convert auth user_id to profile_id
+    const { pool } = await import('../../database/pool');
+    const dbClient = client || pool;
 
-    // Emit via WebSocket to connected user
+    const profileQuery = `
+      SELECT p.id as profile_id
+      FROM auth_management.profiles p
+      WHERE p.user_id = $1
+    `;
+    const profileResult = await dbClient.query(profileQuery, [dto.user_id]);
+
+    if (!profileResult.rows[0]) {
+      log.error(`Profile not found for user ${dto.user_id}, skipping notification`);
+      return; // Skip notification if profile doesn't exist
+    }
+
+    const profileId = profileResult.rows[0].profile_id;
+
+    // Create notification with profile_id
+    const notificationDto = {
+      ...dto,
+      user_id: profileId // Use profile_id instead of auth user_id
+    };
+
+    const notification = await notificationsService.createNotification(notificationDto, client);
+
+    // Emit via WebSocket to connected user (using original auth user_id)
     emitNotificationToUser(dto.user_id, notification);
 
-    // Get updated unread count
-    const unreadCount = await notificationsRepository.getUnreadCount(dto.user_id, client);
+    // Get updated unread count (using profile_id)
+    const unreadCount = await notificationsRepository.getUnreadCount(profileId, client);
 
-    // Emit unread count update
+    // Emit unread count update (using original auth user_id)
     emitUnreadCountUpdate(dto.user_id, unreadCount);
 
-    log.info(`Notification sent to user ${dto.user_id}: ${dto.type}`);
+    log.info(`Notification sent to user ${dto.user_id} (profile ${profileId}): ${dto.type}`);
   } catch (error) {
     log.error('Error sending notification to user:', error);
     throw error;
@@ -73,7 +96,7 @@ export async function notifyAchievementUnlocked(
   await sendNotificationToUser(
     {
       user_id: userId,
-      type: NotificationType.ACHIEVEMENT_UNLOCKED,
+      type: 'achievement' as any, // Use existing DB type
       title: '¡Logro Desbloqueado!',
       message: `Has desbloqueado el logro "${achievementName}" y ganado ${coinsReward} ML Coins.`,
       data,
@@ -100,6 +123,34 @@ export async function notifyLevelUp(
       type: NotificationType.LEVEL_UP,
       title: '¡Subiste de Nivel!',
       message: `¡Felicidades! Has alcanzado el nivel ${newLevel}.`,
+      data,
+    },
+    client
+  );
+}
+
+/**
+ * Notify rank up
+ */
+export async function notifyRankUp(
+  userId: string,
+  newRank: string,
+  previousRank: string,
+  bonusCoins: number,
+  client?: PoolClient
+): Promise<void> {
+  const data: NotificationData = {
+    rank: newRank,
+    previous_rank: previousRank,
+    coins_amount: bonusCoins,
+  };
+
+  await sendNotificationToUser(
+    {
+      user_id: userId,
+      type: 'reward' as any, // Use existing DB type for rank ups
+      title: '¡Ascenso de Rango!',
+      message: `¡Felicidades! Has ascendido de ${previousRank.toUpperCase()} a ${newRank.toUpperCase()}. Bonus: ${bonusCoins} ML Coins.`,
       data,
     },
     client
@@ -174,7 +225,7 @@ export async function notifyStreakMilestone(
   await sendNotificationToUser(
     {
       user_id: userId,
-      type: NotificationType.STREAK_MILESTONE,
+      type: 'reward' as any, // Use existing DB type for streaks
       title: '¡Racha Increíble!',
       message: `¡Felicidades! Has mantenido una racha de ${streakDays} días consecutivos.`,
       data,

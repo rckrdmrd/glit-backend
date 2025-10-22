@@ -3,6 +3,17 @@
  *
  * Handles email verification functionality including token generation,
  * validation, and user verification status updates.
+ *
+ * ⚠️ DEPRECATED - Email verification is currently DISABLED
+ * Users are created with email_verified = true by default.
+ * Database trigger automatically sets email_verified = true and is_active = true.
+ * This service is maintained for potential future use but is not called during registration.
+ *
+ * To re-enable email verification:
+ * 1. Remove email_confirmed_at = NOW() from auth.repository.ts createUser method
+ * 2. Update database trigger to set email_verified = false by default
+ * 3. Uncomment email verification call in auth.service.ts register method
+ * 4. Configure email service provider (currently using mock logging)
  */
 
 import crypto from 'crypto';

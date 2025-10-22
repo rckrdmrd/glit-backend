@@ -28,6 +28,10 @@ export class AuthController {
    * Register new user
    *
    * POST /api/auth/register
+   *
+   * Creates a new user account with email_verified = true by default.
+   * No email verification step required - users can immediately access the platform.
+   * Returns authentication tokens for immediate login.
    */
   register = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -275,6 +279,10 @@ export class AuthController {
    * Verify email with token
    *
    * POST /api/auth/verify-email
+   *
+   * ⚠️ DEPRECATED - Email verification is disabled
+   * This endpoint is maintained for backward compatibility but is not used in the registration flow.
+   * New users are created with email_verified = true by default.
    */
   verifyEmail = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -310,6 +318,10 @@ export class AuthController {
    *
    * POST /api/auth/resend-verification
    * Requires authentication
+   *
+   * ⚠️ DEPRECATED - Email verification is disabled
+   * This endpoint is maintained for backward compatibility but is not used in the registration flow.
+   * New users are created with email_verified = true by default.
    */
   resendVerification = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {

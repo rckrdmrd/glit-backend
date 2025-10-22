@@ -327,6 +327,67 @@ export const {
 } = MissionEvents;
 
 /**
+ * Notify-style wrappers for external integrations
+ * These provide a more detailed interface for exercise completion tracking
+ */
+export async function notifyExerciseCompleted(
+  userId: string,
+  data: {
+    exerciseId: string;
+    exerciseType: string;
+    score: number;
+    isPerfect: boolean;
+    difficulty?: string;
+    moduleId?: string;
+  }
+): Promise<void> {
+  try {
+    await MissionEvents.onExerciseCompleted(userId, {
+      score: data.score,
+      usedHints: undefined, // Will be handled separately if needed
+    });
+
+    log.debug(`Mission notification: exercise completed for user ${userId}`);
+  } catch (error) {
+    log.error('Error in notifyExerciseCompleted:', error);
+  }
+}
+
+export async function notifyMLCoinsEarned(
+  userId: string,
+  data: {
+    amount: number;
+    source: string;
+    exerciseId?: string;
+  }
+): Promise<void> {
+  try {
+    await MissionEvents.onMLCoinsEarned(userId, data.amount);
+
+    log.debug(`Mission notification: ${data.amount} ML Coins earned for user ${userId}`);
+  } catch (error) {
+    log.error('Error in notifyMLCoinsEarned:', error);
+  }
+}
+
+export async function notifyXPEarned(
+  userId: string,
+  data: {
+    amount: number;
+    source: string;
+    exerciseId?: string;
+  }
+): Promise<void> {
+  try {
+    await MissionEvents.onXPEarned(userId, data.amount);
+
+    log.debug(`Mission notification: ${data.amount} XP earned for user ${userId}`);
+  } catch (error) {
+    log.error('Error in notifyXPEarned:', error);
+  }
+}
+
+/**
  * Usage Examples:
  *
  * // In exercises.service.ts
@@ -340,4 +401,14 @@ export const {
  * // In gamification.service.ts
  * import { onAchievementUnlocked } from '../gamification/missions/missions.events';
  * await onAchievementUnlocked(userId);
+ *
+ * // New notify-style integration
+ * import { notifyExerciseCompleted } from '../gamification/missions/missions.events';
+ * await notifyExerciseCompleted(userId, {
+ *   exerciseId: 'ex-123',
+ *   exerciseType: 'quiz',
+ *   score: 95,
+ *   isPerfect: false,
+ *   difficulty: 'intermediate'
+ * });
  */

@@ -70,6 +70,7 @@ export interface UserActivity {
 export interface UserFilters {
   role?: string;
   status?: string;
+  is_active?: boolean;
   tenant_id?: string;
   search?: string; // Search by email, name, or student_id
   created_after?: Date;

@@ -20,6 +20,7 @@ export const listUsersQuerySchema = Joi.object({
   // Filters
   role: Joi.string().valid('student', 'admin_teacher', 'super_admin'),
   status: Joi.string().valid('active', 'suspended', 'banned', 'deleted'),
+  is_active: Joi.boolean(),
   tenant_id: Joi.string().uuid(),
   search: Joi.string().max(255),
   created_after: Joi.date().iso(),
@@ -90,6 +91,26 @@ export const forcePasswordResetBodySchema = Joi.object({
  */
 export const userActivityQuerySchema = Joi.object({
   limit: Joi.number().integer().min(1).max(500).default(50),
+});
+
+/**
+ * Activate User Body Validation
+ */
+export const activateUserBodySchema = Joi.object({
+  reason: Joi.string().max(500).messages({
+    'string.max': 'Reason must not exceed 500 characters',
+  }),
+});
+
+/**
+ * Deactivate User Body Validation
+ */
+export const deactivateUserBodySchema = Joi.object({
+  reason: Joi.string().min(10).max(500).required().messages({
+    'any.required': 'Deactivation reason is required',
+    'string.min': 'Reason must be at least 10 characters',
+    'string.max': 'Reason must not exceed 500 characters',
+  }),
 });
 
 /**

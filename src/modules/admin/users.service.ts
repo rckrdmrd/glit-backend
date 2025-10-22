@@ -648,6 +648,180 @@ export class UsersService {
   }
 
   /**
+   * Activate User
+   *
+   * Activates a user account by setting is_active to true.
+   * Includes validation and comprehensive audit logging.
+   *
+   * @param adminId - Admin performing the action
+   * @param userId - User ID to activate
+   * @param reason - Optional reason for activation
+   * @returns Updated user
+   */
+  async activateUser(
+    adminId: string,
+    userId: string,
+    reason?: string
+  ): Promise<UserAdmin> {
+    try {
+      // Get user details before activation
+      const user = await this.usersRepository.getUserById(userId);
+      if (!user) {
+        throw new Error('User not found');
+      }
+
+      // Check if user is already active
+      if (user.is_active) {
+        throw new Error('User is already active');
+      }
+
+      // Activate user
+      await this.usersRepository.activateUser(userId);
+
+      // Get updated user
+      const updatedUser = await this.usersRepository.getUserById(userId);
+      if (!updatedUser) {
+        throw new Error('Failed to retrieve updated user');
+      }
+
+      // Log admin action
+      await this.auditService.logEvent({
+        event_type: 'admin_action',
+        action: 'activate_user',
+        resource_type: 'user',
+        resource_id: userId,
+        actor_id: adminId,
+        actor_type: 'system',
+        severity: 'info',
+        status: 'success',
+        description: `Admin activated user ${user.email}`,
+        additional_data: {
+          reason: reason || 'No reason provided',
+          previous_status: user.status,
+          previous_is_active: user.is_active,
+          new_is_active: true,
+        },
+      });
+
+      log.info(`User ${user.email} (${userId}) activated by admin ${adminId}`);
+
+      return updatedUser;
+    } catch (error) {
+      log.error('Error in activateUser service:', error);
+
+      await this.auditService.logEvent({
+        event_type: 'admin_action',
+        action: 'activate_user',
+        resource_type: 'user',
+        resource_id: userId,
+        actor_id: adminId,
+        actor_type: 'system',
+        severity: 'error',
+        status: 'failure',
+        description: `Admin failed to activate user`,
+        additional_data: {
+          error: error instanceof Error ? error.message : 'Unknown error',
+          reason: reason || 'No reason provided',
+        },
+      });
+
+      throw error;
+    }
+  }
+
+  /**
+   * Deactivate User
+   *
+   * Deactivates a user account by setting is_active to false.
+   * Prevents admin from deactivating themselves.
+   * Includes comprehensive audit logging.
+   *
+   * @param adminId - Admin performing the action
+   * @param userId - User ID to deactivate
+   * @param reason - Reason for deactivation (required)
+   * @returns Updated user
+   */
+  async deactivateUser(
+    adminId: string,
+    userId: string,
+    reason: string
+  ): Promise<UserAdmin> {
+    try {
+      // Prevent admin self-deactivation
+      if (userId === adminId) {
+        throw new Error('Cannot deactivate your own account');
+      }
+
+      // Get user details before deactivation
+      const user = await this.usersRepository.getUserById(userId);
+      if (!user) {
+        throw new Error('User not found');
+      }
+
+      // Check if user is already inactive
+      if (!user.is_active) {
+        throw new Error('User is already inactive');
+      }
+
+      // Deactivate user
+      await this.usersRepository.deactivateUser(userId);
+
+      // Get updated user
+      const updatedUser = await this.usersRepository.getUserById(userId);
+      if (!updatedUser) {
+        throw new Error('Failed to retrieve updated user');
+      }
+
+      // Log admin action
+      await this.auditService.logEvent({
+        event_type: 'admin_action',
+        action: 'deactivate_user',
+        resource_type: 'user',
+        resource_id: userId,
+        actor_id: adminId,
+        actor_type: 'system',
+        severity: 'warning',
+        status: 'success',
+        description: `Admin deactivated user ${user.email}`,
+        additional_data: {
+          reason,
+          previous_status: user.status,
+          previous_is_active: user.is_active,
+          new_is_active: false,
+          user_details: this.extractRelevantUserFields(user),
+        },
+      });
+
+      log.info(`User ${user.email} (${userId}) deactivated by admin ${adminId}. Reason: ${reason}`);
+
+      // TODO: Send notification to user about account deactivation
+      // await this.sendAccountDeactivationNotification(userId, reason);
+
+      return updatedUser;
+    } catch (error) {
+      log.error('Error in deactivateUser service:', error);
+
+      await this.auditService.logEvent({
+        event_type: 'admin_action',
+        action: 'deactivate_user',
+        resource_type: 'user',
+        resource_id: userId,
+        actor_id: adminId,
+        actor_type: 'system',
+        severity: 'error',
+        status: 'failure',
+        description: `Admin failed to deactivate user`,
+        additional_data: {
+          error: error instanceof Error ? error.message : 'Unknown error',
+          reason,
+        },
+      });
+
+      throw error;
+    }
+  }
+
+  /**
    * Helper: Get User Transactions
    */
   private async getUserTransactions(userId: string): Promise<any[]> {

@@ -5,13 +5,17 @@
  */
 
 import { CoinsRepository, EarnCoinsParams, SpendCoinsParams } from './coins.repository';
+import { RanksService } from './ranks.service';
 import { AppError } from '../../middleware/error.middleware';
 import { ErrorCode } from '../../shared/types';
 import { log } from '../../shared/utils/logger';
 import { PoolClient } from 'pg';
 
 export class CoinsService {
-  constructor(private coinsRepository: CoinsRepository) {}
+  constructor(
+    private coinsRepository: CoinsRepository,
+    private ranksService: RanksService
+  ) {}
 
   /**
    * Earning rules based on documentation
@@ -62,7 +66,33 @@ export class CoinsService {
    */
   async earnCoins(params: EarnCoinsParams, dbClient?: PoolClient): Promise<any> {
     try {
-      const transaction = await this.coinsRepository.earnCoins(params, dbClient);
+      // Get user's current rank multiplier
+      const rankMultiplier = await this.ranksService.getCurrentMultiplier(params.userId, dbClient);
+
+      // Calculate final multiplier (rank multiplier * any additional multiplier passed)
+      const baseMultiplier = params.multiplier || 1.0;
+      const finalMultiplier = rankMultiplier * baseMultiplier;
+
+      // Apply multiplier to base amount
+      const baseAmount = params.amount;
+      const finalAmount = Math.floor(baseAmount * finalMultiplier);
+
+      // Log for debugging
+      log.info(
+        `Earning coins for user ${params.userId}: ` +
+        `base=${baseAmount}, rankMultiplier=${rankMultiplier}, ` +
+        `additionalMultiplier=${baseMultiplier}, finalMultiplier=${finalMultiplier}, ` +
+        `finalAmount=${finalAmount}`
+      );
+
+      // Create updated params with final amount and multiplier
+      const updatedParams: EarnCoinsParams = {
+        ...params,
+        amount: finalAmount,
+        multiplier: finalMultiplier,
+      };
+
+      const transaction = await this.coinsRepository.earnCoins(updatedParams, dbClient);
 
       return {
         transaction: {

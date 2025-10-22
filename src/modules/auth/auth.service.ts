@@ -26,6 +26,11 @@ export class AuthService {
    *
    * @param registerDto - Registration data
    * @returns Authentication response with token
+   *
+   * NOTE: Email verification is DISABLED.
+   * Users are created with email_verified = true and is_active = true by default.
+   * Database trigger automatically sets these fields on user creation.
+   * No verification email is sent - users can immediately access the platform.
    */
   async register(registerDto: RegisterDto): Promise<AuthResponse> {
     try {
@@ -48,7 +53,8 @@ export class AuthService {
       // Hash password
       const hashedPassword = await bcrypt.hash(registerDto.password, 10);
 
-      // Create user
+      // Create user with email pre-verified (no email verification step required)
+      // Database trigger will set email_verified = true and is_active = true
       const user = await this.authRepository.createUser({
         email: registerDto.email,
         password: hashedPassword,
@@ -63,11 +69,16 @@ export class AuthService {
         },
       });
 
-      // Generate tokens
+      // EMAIL VERIFICATION DISABLED
+      // Previously, we would send a verification email here:
+      // await this.emailVerificationService.sendVerificationEmail(user.id, user.email);
+      // Now users are immediately verified and can use the platform without email confirmation.
+
+      // Generate tokens for immediate login
       const token = this.generateAccessToken(user);
       const refreshToken = this.generateRefreshToken(user);
 
-      log.info(`User registered successfully: ${user.email}`);
+      log.info(`User registered successfully (email pre-verified): ${user.email}`);
 
       return {
         user: {
@@ -105,7 +116,7 @@ export class AuthService {
     ipAddress?: string
   ): Promise<AuthResponse> {
     try {
-      // Find user by email
+      // Find user by email (includes is_active and suspension data)
       const user = await this.authRepository.findUserByEmail(loginDto.email);
 
       if (!user) {
@@ -122,6 +133,38 @@ export class AuthService {
 
       if (!isPasswordValid) {
         throw new AppError('Invalid credentials', 401, ErrorCode.INVALID_CREDENTIALS);
+      }
+
+      // Check account status from profiles table
+      // Possible values: 'active', 'inactive', 'suspended', 'pending'
+      if (!user.status || user.status === 'inactive') {
+        throw new AppError(
+          'Your account has been deactivated. Please contact support for assistance.',
+          401,
+          ErrorCode.ACCOUNT_INACTIVE
+        );
+      }
+
+      if (user.status === 'suspended') {
+        throw new AppError(
+          'Your account has been suspended. Please contact support for assistance.',
+          403,
+          ErrorCode.ACCOUNT_SUSPENDED
+        );
+      }
+
+      if (user.status === 'pending') {
+        throw new AppError(
+          'Your account is pending activation. Please contact support.',
+          403,
+          ErrorCode.ACCOUNT_INACTIVE
+        );
+      }
+
+      // Additional validation: Check email_verified (should always be true for new users)
+      // This is a safety check in case database trigger didn't run
+      if (!user.email_verified && user.status === 'active') {
+        log.warn(`User ${user.email} has active status but email_verified=false, allowing login anyway`);
       }
 
       // Update last sign in timestamp
@@ -189,11 +232,36 @@ export class AuthService {
         throw new AppError('Invalid refresh token', 401, ErrorCode.INVALID_TOKEN);
       }
 
-      // Get user
+      // Get user with status from profiles table
       const user = await this.authRepository.findUserById(payload.sub);
 
       if (!user || user.deleted_at) {
         throw new AppError('User not found or inactive', 401, ErrorCode.INVALID_TOKEN);
+      }
+
+      // Check account status
+      if (user.status === 'inactive') {
+        throw new AppError(
+          'Your account has been deactivated. Please contact support for assistance.',
+          401,
+          ErrorCode.ACCOUNT_INACTIVE
+        );
+      }
+
+      if (user.status === 'suspended') {
+        throw new AppError(
+          'Your account has been suspended. Please contact support for assistance.',
+          403,
+          ErrorCode.ACCOUNT_SUSPENDED
+        );
+      }
+
+      if (user.status === 'pending') {
+        throw new AppError(
+          'Your account is pending activation. Please contact support.',
+          403,
+          ErrorCode.ACCOUNT_INACTIVE
+        );
       }
 
       // Generate new access token
